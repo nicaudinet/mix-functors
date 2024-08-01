@@ -1,44 +1,13 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
 import Control.Monad.Random
-import Data.Kind (Type)
-
-type family BaseP t :: Type -> Type
-type family BaseM t :: Type -> Type
-
-data MixF pAlg mAlg m x
-  = Pure (pAlg x)
-  | Monadic (mAlg (m x))
-  deriving (Functor)
-
-class (Traversable (BaseP t), Traversable (BaseM t)) => Recurse t where
-  project :: Applicative m => t -> MixF (BaseP t) (BaseM t) m t
-
-cata
-  :: forall t m a . (Monad m, Recurse t)
-  => (BaseP t a -> a) -- ^ Pure algebra
-  -> (BaseM t (m a) -> m a) -- ^ Monadic algebra
-  -> t
-  -> m a
-cata f g expr = case project expr of
-  Pure p -> runPure p
-  Monadic m -> runMona m
-  where
-    runPure :: BaseP t t -> m a
-    runPure = fmap f . sequence . fmap (cata f g)
-    
-    runMona :: BaseM t (m t) -> m a
-    runMona = g <=< traverse (fmap (cata f g))
-
----
+import Data.Functor.Mixfix
 
 data Expr
   = Lit Int
@@ -63,6 +32,14 @@ instance Recurse Expr where
   project (Add x y) = Pure (AddF x y)
   project (Random low high) = Monadic (RandomF (pure low) (pure high))
 
+instance Num Expr where
+  fromInteger = Lit . fromInteger
+  (+) = Add
+  (*) = undefined
+  abs = undefined
+  signum = undefined
+  negate = undefined
+
 evalP :: BaseP Expr Int -> Int
 evalP (LitF i) = i
 evalP (AddF x y) = x + y
@@ -73,8 +50,11 @@ evalM (RandomF mlow mhigh) = do
   high <- mhigh
   getRandomR (low, high)
 
+rand :: Expr -> Expr -> Expr
+rand = Random
+
 example :: Expr
-example = Add (Lit 1) (Add (Random (Lit 0) (Lit 10)) (Lit 3))
+example = 1 + (rand 0 10) + 3
 
 main :: IO ()
 main = do
