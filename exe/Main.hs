@@ -1,7 +1,9 @@
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
+import Data.Proxy
 import Control.Monad.Random
 
 -- data Fix f = Fix (f (Fix f))
@@ -50,38 +52,31 @@ instance Functor m => Functor (ExprF m) where
   fmap f (Pure p) = Pure (fmap f p)
   fmap f (Mona m) = Mona (fmap (fmap f) m)
 
-type M = Rand StdGen
-
 -- | Unravel the recursion one step
-project :: Expr -> ExprF M Expr
-project (Lit i) = Pure (LitF i)
-project (Add x y) = Pure (AddF x y)
-project (Random low high) = Mona (RandomF (pure low) (pure high))
+project :: Applicative m => Proxy m -> Expr -> ExprF m Expr
+project _ (Lit i) = Pure (LitF i)
+project _ (Add x y) = Pure (AddF x y)
+project _ (Random low high) = Mona (RandomF (pure low) (pure high))
 
 computePure :: PureF Int -> Int
 computePure (LitF i) = i
 computePure (AddF x y) = x + y
 
-computeMona :: MonaF (M Int) -> M Int
+computeMona :: MonadRandom m => MonaF (m Int) -> m Int
 computeMona (RandomF mlow mhigh) = do
   low <- mlow
   high <- mhigh
   getRandomR (low, high)
 
--- | Fold the recursive structure one step
-compute :: ExprF M Int -> M Int
-compute (Pure p) = pure (computePure p)
-compute (Mona p) = computeMona p
-
-cata :: Expr -> M Int
-cata expr = case project expr of
+cata :: forall m. MonadRandom m => Expr -> m Int
+cata expr = case project (Proxy :: Proxy m) expr of
   Pure p -> runPure p
   Mona m -> runMona m
   where
-    runPure :: PureF Expr -> M Int
+    runPure :: Monad m => PureF Expr -> m Int
     runPure = fmap computePure . sequence . fmap cata
 
-    runMona :: MonaF (M Expr) -> M Int
+    runMona :: Monad m => MonaF (m Expr) -> m Int
     runMona = computeMona <=< traverse (fmap cata)
 
 example :: Expr
