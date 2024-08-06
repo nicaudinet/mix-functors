@@ -1,5 +1,5 @@
 cabal-version:      3.0
-name:               mixfix
+name:               mix-functors
 version:            0.1.0.0
 license:            MIT
 license-file:       LICENSE
@@ -15,9 +15,9 @@ library
     default-language: Haskell2010
     hs-source-dirs: src
     exposed-modules:
-      Data.Functor.Mixfix
+      Data.Functor.Mix
     build-depends:
-      base ^>=4.17.2.1
+        base ^>=4.17.2.1
 
 executable mixfix
     import: warnings
@@ -25,6 +25,8 @@ executable mixfix
     main-is: Main.hs
     build-depends:
         base ^>=4.17.2.1
-      , mixfix
+      , mix-functors
+      , data-fix
       , MonadRandom
+      , recursion-schemes
     hs-source-dirs: exe

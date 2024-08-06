@@ -1,62 +1,63 @@
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Main where
 
-import Control.Monad.Random
-import Data.Functor.Mixfix
+import Control.Monad.Random (MonadRandom, Random, getRandomR, evalRandIO) 
+import Data.Functor.Mix (Mix(..), mixM)
+import Data.Functor.Foldable (cata)
+import Data.Fix (Fix(..))
 
-data Expr
-  = Lit Int
-  | Add Expr Expr
-  | Random Expr Expr
+-----------
+-- Types --
+-----------
 
-data ExprP x
-  = LitF Int
+data CalcF a x
+  = LitF a
   | AddF x x
   deriving (Functor, Foldable, Traversable)
 
-data ExprM x = RandomF x x
-  deriving (Functor, Foldable, Traversable)
+data RandF x
+  = RandF x x
+  deriving Functor
 
-type instance BaseP Expr = ExprP
-type instance BaseM Expr = ExprM
+type CalcRand a = Fix (Mix (CalcF a) RandF)
 
--- | Unravel the recursion one step
-instance Recurse Expr where
-  project :: Applicative m => Expr -> MixF (BaseP Expr) (BaseM Expr) m Expr
-  project (Lit i) = Pure (LitF i)
-  project (Add x y) = Pure (AddF x y)
-  project (Random low high) = Monadic (RandomF (pure low) (pure high))
+------------------
+-- Construction --
+------------------
 
-instance Num Expr where
-  fromInteger = Lit . fromInteger
-  (+) = Add
+instance Num a => Num (CalcRand a) where
+  fromInteger = Fix . F . LitF . fromInteger
+  x + y = Fix (F (AddF x y))
   (*) = undefined
   abs = undefined
   signum = undefined
   negate = undefined
 
-evalP :: BaseP Expr Int -> Int
-evalP (LitF i) = i
-evalP (AddF x y) = x + y
+rand :: CalcRand a -> CalcRand a -> CalcRand a
+rand x y = Fix (G (RandF x y))
 
-evalM :: MonadRandom m => BaseM Expr (m Int) -> m Int
-evalM (RandomF mlow mhigh) = do
-  low <- mlow
-  high <- mhigh
-  getRandomR (low, high)
-
-rand :: Expr -> Expr -> Expr
-rand = Random
-
-example :: Expr
+example :: Num a => CalcRand a
 example = 1 + (rand 0 10) + 3
+
+----------------
+-- Evaluation --
+----------------
+
+evalCalcAlg :: Num a => CalcF a a -> a
+evalCalcAlg (LitF a) = a
+evalCalcAlg (AddF x y) = x + y
+
+evalRandAlg :: (MonadRandom m, Random a) => RandF (m a) -> m a
+evalRandAlg (RandF mx my) = do
+  x <- mx
+  y <- my
+  getRandomR (x, y)
 
 main :: IO ()
 main = do
-  gen <- getStdGen
-  print $ evalRand (cata evalP evalM example) gen
+  result <- evalRandIO $ cata (mixM evalCalcAlg evalRandAlg) example :: IO Int
+  print $ result
