@@ -17,6 +17,7 @@ import Data.Fix (Fix(..))
 data CalcF a x
   = LitF a
   | AddF x x
+  | MulF x x
   deriving (Functor, Foldable, Traversable)
 
 data RandF x
@@ -32,7 +33,7 @@ type CalcRand a = Fix (Mix (CalcF a) RandF)
 instance Num a => Num (CalcRand a) where
   fromInteger = Fix . F . LitF . fromInteger
   x + y = Fix (F (AddF x y))
-  (*) = undefined
+  x * y = Fix (F (MulF x y))
   abs = undefined
   signum = undefined
   negate = undefined
@@ -41,7 +42,7 @@ rand :: CalcRand a -> CalcRand a -> CalcRand a
 rand x y = Fix (G (RandF x y))
 
 example :: Num a => CalcRand a
-example = 1 + (rand 0 10) + 3
+example = 1 + (rand 0 10) + 3 * (rand 0 (4 * 5))
 
 ----------------
 -- Evaluation --
@@ -50,6 +51,7 @@ example = 1 + (rand 0 10) + 3
 evalCalcAlg :: Num a => CalcF a a -> a
 evalCalcAlg (LitF a) = a
 evalCalcAlg (AddF x y) = x + y
+evalCalcAlg (MulF x y) = x * y
 
 evalRandAlg :: (MonadRandom m, Random a) => RandF (m a) -> m a
 evalRandAlg (RandF mx my) = do
